@@ -38,6 +38,29 @@ Emacs may delay timers while busy.  Playback uses elapsed time."
 Clients batching other display work can defer the mode-line update here.
 Explicit playback controls still request an immediate update.")
 
+;; Testable seams.  These are variables rather than stubbed built-ins on
+;; purpose: compiled code calls `float-time' and `get-buffer-window' directly,
+;; so `cl-letf' on those subrs cannot reach it.  Rebinding a variable always
+;; does, whatever the host does with subr trampolines or native compilation.
+(defvar motion-line-current-time-function #'float-time
+  "Function returning the current time in seconds, called with no arguments.
+Every playback control and tick reads the clock through it, so rebinding it
+drives reproducible playback from a deterministic or virtual clock.")
+
+(defun motion-line--now ()
+  "Return the current playback time from `motion-line-current-time-function'."
+  (funcall motion-line-current-time-function))
+
+(defun motion-line--visible-p ()
+  "Return non-nil when the current buffer is displayed somewhere."
+  (get-buffer-window (current-buffer) t))
+
+(defvar motion-line-visible-p-function #'motion-line--visible-p
+  "Function returning non-nil when the current buffer may render.
+Hidden buffers keep their clock but skip intermediate rendering; rebind it
+to render into an undisplayed buffer, as batch tests and off-screen frames
+need.")
+
 (defun motion-line--positive-number-p (value)
   "Return non-nil when VALUE is a finite positive number."
   (and (numberp value) (> value 0) (< value 1.0e+INF)))
@@ -178,7 +201,7 @@ endpoint even in hidden buffers so it can release the shared timer."
             (* (plist-get player :repeat)
                (plist-get (plist-get player :clip) :duration))
             (plist-get player :playing) nil))
-    (when (or force (cdr position) (get-buffer-window (current-buffer) t))
+    (when (or force (cdr position) (funcall motion-line-visible-p-function))
       (let ((text (motion-line-sample (plist-get player :clip)
                                             (car position))))
         (unless (equal-including-properties text (plist-get player :text))
@@ -212,7 +235,7 @@ endpoint even in hidden buffers so it can release the shared timer."
 (defun motion-line--tick ()
   "Update running players, isolating renderer errors at the timer boundary."
   (setq motion-line--timer nil)
-  (let ((now (float-time)))
+  (let ((now (motion-line--now)))
     (dolist (buffer motion-line--buffers)
       (when (buffer-live-p buffer)
         (with-current-buffer buffer
@@ -257,7 +280,7 @@ slot and report the error in the echo area and *Messages*."
     (error "Speed must be finite and positive: %S" speed))
   (unless (memq direction '(normal reverse alternate))
     (error "Direction must be normal, reverse or alternate: %S" direction))
-  (let* ((now (float-time))
+  (let* ((now (motion-line--now))
          (player (list :clip clip :repeat repeat :speed speed
                        :direction direction :offset 0 :since now
                        :playing t :text nil)))
@@ -290,7 +313,7 @@ never calls a renderer or changes playback, so it is safe inside `:eval'."
   "Pause SLOT at its current time, retaining its visible frame."
   (when-let* ((player (copy-sequence (alist-get slot motion-line--players))))
     (when (plist-get player :playing)
-      (let ((now (float-time)))
+      (let ((now (motion-line--now)))
         (motion-line--update player now t)
         (setf (plist-get player :offset) (motion-line--elapsed player now)
               (plist-get player :playing) nil)))
@@ -304,7 +327,7 @@ never calls a renderer or changes playback, so it is safe inside `:eval'."
     (unless (plist-get player :playing)
       (when (cdr (motion-line--position player (plist-get player :offset)))
         (setf (plist-get player :offset) 0))
-      (setf (plist-get player :since) (float-time)
+      (setf (plist-get player :since) (motion-line--now)
             (plist-get player :playing) t)
       (motion-line--update player (plist-get player :since) t)
       (setf (alist-get slot motion-line--players) player)
@@ -319,7 +342,7 @@ Negative positions clamp to zero."
     (error "Seek position must be finite: %S" seconds))
   (when-let* ((player (copy-sequence (alist-get slot motion-line--players))))
     (setf (plist-get player :offset) (max 0 seconds)
-          (plist-get player :since) (float-time))
+          (plist-get player :since) (motion-line--now))
     (motion-line--update player (plist-get player :since) t)
     (setf (alist-get slot motion-line--players) player)
     (motion-line--schedule)

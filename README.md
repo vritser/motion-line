@@ -187,6 +187,13 @@ client's pending paint. Its default is `force-mode-line-update`; explicit
 playback controls still request updates immediately. Callback errors are
 reported at the timer boundary, and scheduling continues.
 
+Playback reads its clock and its visibility decision through
+`motion-line-current-time-function` (default `float-time`) and
+`motion-line-visible-p-function` (default: displayed in any window). Rebinding
+them drives playback from a deterministic or virtual clock, or renders into an
+undisplayed buffer. The test suite uses both instead of stubbing built-in
+functions, which compiled code may call without consulting the function cell.
+
 Keep frame widths consistent to avoid mode-line movement. This package does
 not reserve columns or resize images automatically. SVG support is optional;
 choose your own text fallback for image clips. A clip created from cached
@@ -205,7 +212,9 @@ Run `scripts/verify.sh` for byte compilation, the ERT
 suite and a silent clean load. Set `EMACS=/path/to/emacs` to test another
 Emacs version. The script leaves no compiled files in the checkout.
 Tests cover timing, composition, repeats, playback controls, error isolation,
-display properties, hidden buffers, and resource cleanup.
+display properties, hidden buffers, and resource cleanup. Timing and
+visibility come from the seams above, so timing assertions stay deterministic
+in interpreted, byte-compiled and natively compiled builds.
 
 ## License
 

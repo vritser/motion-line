@@ -13,6 +13,11 @@ is under development; a release date will be added when it is published.
 - **Independent playback controls**: play clips in named, buffer-local slots
   with finite or infinite repeats, speed control, reverse or alternating
   playback, pause, resume and seek.
+- **Deterministic timing seams**: `motion-line-current-time-function` and
+  `motion-line-visible-p-function` expose the playback clock and the
+  render-visibility decision. Rebinding them drives playback from a
+  deterministic or virtual clock, and renders into an undisplayed buffer,
+  without stubbing built-in functions that compiled code calls directly.
 - **Shared scheduling**: one timer advances running slots using elapsed time.
   Hidden buffers skip intermediate rendering, and buffer death or major-mode
   changes clean up their slots. Paused and completed slots retain their output

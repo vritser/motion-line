@@ -20,15 +20,15 @@
   (let ((motion-line--buffers nil)
         (motion-line--timer nil)
         (motion-line-test--now 100)
-        (motion-line-test--visible t))
-    (cl-letf (((symbol-function 'float-time)
-               (lambda (&optional _time) motion-line-test--now))
-              ((symbol-function 'get-buffer-window)
-               (lambda (&rest _) motion-line-test--visible)))
-      (unwind-protect
-          (with-temp-buffer (funcall body))
-        (when motion-line--timer
-          (cancel-timer motion-line--timer))))))
+        (motion-line-test--visible t)
+        (motion-line-current-time-function
+         (lambda () motion-line-test--now))
+        (motion-line-visible-p-function
+         (lambda () motion-line-test--visible)))
+    (unwind-protect
+        (with-temp-buffer (funcall body))
+      (when motion-line--timer
+        (cancel-timer motion-line--timer)))))
 
 (defun motion-line-test--tick (seconds)
   "Advance to SECONDS and run one scheduler callback."
